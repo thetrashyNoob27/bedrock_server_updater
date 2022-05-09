@@ -31,7 +31,7 @@ process is:
 
   if fail then quit.
   
-8.extract server zip to YOUR_SERVER_DIR/,but dont ['server.properties','permissions.json','allowlist.json'] if present.
+8.extract server zip to YOUR_SERVER_DIR/,but dont overwrite ['server.properties','permissions.json','allowlist.json'] if present.and create server_version.txt
 
 9.excute post-upgrade command
 
