@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # coding: utf-8
-from nturl2path import pathname2url
-from operator import truediv
-import requests
-import bs4
-import re
-import os
+import argparse
 import datetime
 import io
-import zipfile
-import argparse
+import os
+import pathlib
+import re
 import tarfile
+import zipfile
+
+import bs4
+import requests
 
 
 def workingHeaders():
@@ -128,7 +128,7 @@ def getServerLink():
     except requests.RequestException as e:
         print(f"An error occurred: {str(e)}")
         return ''
-    if pageResponse.status_code!=200:
+    if pageResponse.status_code != 200:
         print("get page response code is not 200")
         return ''
 
@@ -145,9 +145,9 @@ def getServerLink():
 
 def removeTralingPathSeparator(p):
     if p.endswith(os.sep):
-        return p[:-1]
+        return removeTralingPathSeparator(p[:-1])
     else:
-        return p
+        return pathlib.Path(p)
 
 
 def backupServer(serverDir, outputDir):
@@ -158,9 +158,10 @@ def backupServer(serverDir, outputDir):
     outputFile = os.path.join(outputDir, tarName)
     if not os.path.exists(outputDir):
         os.mkdir(outputDir)
-    with tarfile.open(outputFile,'w:gz') as tar:
-        tar.add(os.path.dirname(serverDir), arcname="")
+    with tarfile.open(outputFile, 'w:gz') as tar:
+        tar.add(serverDir, arcname=os.path.basename(serverDir))
     return True
+
 
 def updateServer(serverZip, version, serverDir):
     dontOverWrite = ['server.properties', 'permissions.json', 'allowlist.json']
