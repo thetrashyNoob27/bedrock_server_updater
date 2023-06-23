@@ -154,7 +154,7 @@ def backupServer(serverDir, outputDir):
     serverDir = removeTralingPathSeparator(serverDir)
     outputDir = removeTralingPathSeparator(outputDir)
     datetimeStr = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
-    tarName = "bedrock-backup-%s.tar.gz" % (datetimeStr)
+    tarName = "bedrock-backup-%s-v%s.tar.gz" % (datetimeStr,serverDirVersion(serverDir))
     outputFile = os.path.join(outputDir, tarName)
     if not os.path.exists(outputDir):
         os.mkdir(outputDir)
