@@ -2,6 +2,7 @@
 # coding: utf-8
 import argparse
 import datetime
+import enum
 import io
 import os
 import pathlib
@@ -11,6 +12,18 @@ import zipfile
 
 import bs4
 import requests
+
+
+class ExitStatus(enum.Enum):
+    SUCCESS = 0
+    ARGUMENTS_ERROR = enum.auto()
+    FILE_NOT_FOUND = enum.auto()
+    DOWNLOAD_FAIL = enum.auto()
+    SERVER_ZIP_DAMAGED = enum.auto()
+    BACKUP_DIR_ERROR = enum.auto()
+    DOWNLOAD_DIR_ERROR = enum.auto()
+    SCRAPE_INFO_ERROR = enum.auto()
+    BACKUP_FAIL = enum.auto()
 
 
 def workingHeaders():
@@ -90,6 +103,10 @@ def downloadServerFile(link, dir, headers={}):
     content = resp.content
     zipFile.write(content)
     zipFile.close()
+    if not zipFileOk(filePath):
+        os.remove(filePath)
+        print("downlaod zip file check fail. removeing...")
+
     return downloadSuccess, content
 
 
@@ -154,7 +171,7 @@ def backupServer(serverDir, outputDir):
     serverDir = removeTralingPathSeparator(serverDir)
     outputDir = removeTralingPathSeparator(outputDir)
     datetimeStr = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
-    tarName = "bedrock-backup-%s-v%s.tar.gz" % (datetimeStr,serverDirVersion(serverDir))
+    tarName = "bedrock-backup-%s-v%s.tar.gz" % (datetimeStr, serverDirVersion(serverDir))
     outputFile = os.path.join(outputDir, tarName)
     if not os.path.exists(outputDir):
         os.mkdir(outputDir)
@@ -169,7 +186,10 @@ def updateServer(serverZip, version, serverDir):
     for f in dontOverWrite:
         if os.path.exists(os.path.join(serverDir, f)):
             excludeFiles.append(f)
-    zipObj = zipfile.ZipFile(io.BytesIO(serverZip), 'r')
+    try:
+        zipObj = zipfile.ZipFile(io.BytesIO(serverZip), 'r')
+    except zipfile.BadZipFile as e:
+        pass
     for f in zipObj.namelist():
         if f in excludeFiles:
             continue
@@ -219,6 +239,15 @@ def testDirAccessable(path, pathName):
     return False
 
 
+def zipFileOk(filePath):
+    try:
+        with zipfile.ZipFile(filePath, 'r') as zip_file:
+            result = zip_file.testzip()
+            return result is None
+    except zipfile.BadZipFile:
+        return False
+
+
 if __name__ == "__main__":
     # settings:
     settings = argParser()
@@ -226,7 +255,7 @@ if __name__ == "__main__":
     serverDir = settings.s
     if serverDir is None:
         print("must set server dir.")
-        exit(1)
+        exit(ExitStatus.ARGUMENTS_ERROR.value)
     if not (settings.b is None):
         backupDir = settings.b
     else:
@@ -249,13 +278,13 @@ if __name__ == "__main__":
         dirOK &= testDirAccessable(backupDir, "backup dir")
     dirOK &= testDirAccessable(downloadDir, "server download dir")
     if not dirOK:
-        exit(1)
+        exit(ExitStatus.BACKUP_DIR_ERROR.value)
 
     # get newest version
     link = getServerLink()
     if link == '':
         print("get server version fail.")
-        exit(1)
+        exit(ExitStatus.SCRAPE_INFO_ERROR.value)
     ver = getVer(link)
     print("%s" % (link))
     print("current server version:%s" % (ver))
@@ -268,22 +297,27 @@ if __name__ == "__main__":
         [downloadSuccess, serverzip] = downloadServerFile(link, downloadDir, headers=workingHeaders())
         print("download success:%s" % (str(downloadSuccess)))
         if not downloadSuccess:
-            exit(1)
+            exit(ExitStatus.DOWNLOAD_FAIL.value)
     elif not settings.jd:
         serverFileName = getServerName(link)
-        serverFile = open(os.path.join(downloadDir, serverFileName), 'rb')
+        serverFilePath = os.path.join(downloadDir, serverFileName)
+        if not zipFileOk(serverFilePath):
+            os.remove(serverFilePath)
+            print("server zip pack damaged. update fail. removing server zip pack.")
+            exit(ExitStatus.SERVER_ZIP_DAMAGED.value)
+        serverFile = open(serverFilePath, 'rb')
         serverzip = serverFile.read()
         serverFile.close()
 
     if settings.jd == True:
         # just download server
-        exit(0)
+        exit(ExitStatus.SUCCESS.value)
 
     serverIsLatested = serverDirVersion(serverDir) == ver
 
     if serverIsLatested and not settings.fu:
         print("server is newest.")
-        exit(0)
+        exit(ExitStatus.SUCCESS.value)
 
     print("backup old server.")
     if not settings.pre is None:
@@ -297,7 +331,7 @@ if __name__ == "__main__":
             res = os.system(settings.post)
             if res != 0:
                 print("post-update command fail.")
-        exit(2)
+        exit(ExitStatus.BACKUP_FAIL.value)
     print("backup server success.")
 
     print("update server...")
@@ -306,3 +340,5 @@ if __name__ == "__main__":
         res = os.system(settings.post)
         if res != 0:
             print("post-update command fail.")
+
+    exit(ExitStatus.SUCCESS.value)
